@@ -1,0 +1,10 @@
+{
+  "name": "loja-adega",
+  "version": "0.1.0",
+  "description": "Loja online mobile-first para adega, com pedido por WhatsApp e painel administrativo.",
+  "private": true,
+  "scripts": {
+    "start": "npx serve ."
+  },
+  "license": "MIT"
+}

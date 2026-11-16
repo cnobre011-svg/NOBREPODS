@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Adega</title>
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script>
+/* Modo local: quando a página NÃO roda dentro do claude.ai, simula db/user/assets com localStorage. */
+(function(){if(window.claude)return;
+const L={};const read=c=>{try{return JSON.parse(localStorage.getItem('db:'+c))||{}}catch(e){return {}}};
+const write=(c,o)=>{localStorage.setItem('db:'+c,JSON.stringify(o));(L[c]||[]).forEach(f=>f())};
+const sd=(id,v)=>({id,exists:v!==undefined,data:()=>v});
+const sub=(c,f)=>{(L[c]=L[c]||[]).push(f);setTimeout(f,0);return()=>{L[c]=L[c].filter(x=>x!==f)}};
+const doc=(c,id)=>({id,get:async()=>sd(id,read(c)[id]),set:async d=>{const o=read(c);o[id]=d;write(c,o)},update:async d=>{const o=read(c);o[id]={...(o[id]||{}),...d};write(c,o)},delete:async()=>{const o=read(c);delete o[id];write(c,o)},onSnapshot:next=>sub(c,()=>next(sd(id,read(c)[id])))});
+const col=c=>({doc:id=>doc(c,id),onSnapshot:next=>sub(c,()=>{const o=read(c);const docs=Object.keys(o).map(id=>sd(id,o[id]));next({docs,size:docs.length,empty:!docs.length})})});
+const db={collection:col,doc:p=>{const i=p.lastIndexOf('/');return doc(p.slice(0,i),p.slice(i+1))}};
+if(!localStorage.getItem('db:products')){
+ write('categories',{vinhos:{name:'Vinhos',desc:'Vinhos tintos e brancos.',img:'',order:0},destilados:{name:'Destilados',desc:'Whisky e outros destilados.',img:'',order:1},novidades:{name:'Novidades',desc:'Lançamentos da adega.',img:'',order:2}});
+ const P=(n,d,pr,pm,cat,f,nw,o)=>({name:n,desc:d,price:pr,promo:pm,promoOn:pm>0,cat,brand:'',feat:f,isNew:nw,active:true,order:o,img:''});
+ write('products',{p1:{...P('Vinho Branco','Vinho Ano 2014, contém 750 ml',85,0,'vinhos',true,false,0),groups:[{id:'g1',name:'Escolha o sabor',required:true,show:true,min:1,max:1,options:[1,2,3,4,5].map(i=>({id:'o'+i,name:'Opção de sabor '+i,price:0,img:'',active:true}))}],optOn:true},
+  p2:P('Vinho Tinto','Ano 2008. Vinho com sabor intenso e encorpado, contém 750 ml',75,0,'vinhos',false,false,1),
+  p3:P('Vinho Branco','Ano 2013, contém 750 ml',220,0,'vinhos',true,false,2),
+  p4:P('Vinho Tinto Seco','Ano 2018, Vinho Australiano, seco. - 750 ml',150,130,'vinhos',true,false,3),
+  p5:P('Whisky Clássico','Produto de demonstração. Edite no painel.',180,0,'destilados',true,true,4)})}
+const user={canEdit:async()=>true,isOwner:async()=>true,id:async()=>'local'};
+const assets={upload:f=>new Promise(r=>{const fr=new FileReader();fr.onload=()=>r({url:fr.result});fr.readAsDataURL(f)})};
+window.claude={use:async n=>({db,user,assets}[n]||null)};
+})();
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px)}
+html,body{margin:0;background:#F4F5F7;color:#374151;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.hs{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;padding:0 16px 8px}
+.hs>*{scroll-snap-align:start;flex:0 0 72%;max-width:300px}
+.card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useMemo}=React;
+const ld=(k,d)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}};
+const sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+const brl=n=>'R$ '+Number(n).toFixed(2).replace('.',',');
+const disc=p=>p.old>p.price?Math.round((p.old-p.price)/p.old*100):0;
+
+let CATS=[];
+
+const Ico=({n,c='w-6 h-6'})=>{
+ const P={home:'M3 11l9-8 9 8v10a1 1 0 01-1 1h-5v-7H9v7H4a1 1 0 01-1-1z',
+ pct:'M19 5L5 19M7.5 9a1.5 1.5 0 100-3 1.5 1.5 0 000 3zm9 9a1.5 1.5 0 100-3 1.5 1.5 0 000 3z',
+ bag:'M6 7h12l1 14H5zM9 7a3 3 0 016 0',
+ user:'M12 12a4 4 0 100-8 4 4 0 000 8zM4 21a8 8 0 0116 0',
+ search:'M11 18a7 7 0 100-14 7 7 0 000 14zM21 21l-5-5',
+ down:'M6 9l6 6 6-6',gift:'M20 12v9H4v-9M2 7h20v5H2zM12 22V7M12 7C10 7 8 6 8 4.5S10 2 12 7zm0 0c2 0 4-1 4-2.5S14 2 12 7z',
+ x:'M6 6l12 12M18 6L6 18',cart:'M3 4h2l2 12h11l2-8H6'};
+ return <svg viewBox="0 0 24 24" className={c} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={P[n]}/></svg>};
+
+const Img=({p,className=''})=>p.img
+ ?<img src={p.img} alt={p.name} className={'object-cover '+className}/>
+ :<div className={'bg-gray-100 flex items-center justify-center text-3xl '+className}>🍷</div>;
+
+const Price=({p})=>(<div className="flex items-center flex-wrap gap-x-2">
+ <span className={'text-lg font-semibold '+(disc(p)?'text-green-600':'text-gray-800')}>{brl(p.price)}</span>
+ {disc(p)>0&&<><span className="line-through text-gray-400 text-sm">{brl(p.old)}</span>
+ <span className="bg-green-100 text-green-700 text-xs font-semibold rounded-md px-1.5 py-0.5">-{disc(p)}%</span></>}</div>);
+
+const Row=({p,onAdd})=>(<div onClick={()=>onAdd(p)} className="card p-4 flex gap-3 min-h-[150px] cursor-pointer">
+ <div className="flex-1 flex flex-col justify-between min-w-0">
+  <div><h3 className="text-lg font-bold text-gray-800 leading-snug">{p.name}{p.isNew&&<span className="text-gray-800"> (lançamento)</span>}</h3>
+  <p className="text-sm text-gray-500 mt-1 line-clamp-3">{p.desc}</p></div>
+  <div className="mt-2"><Price p={p}/></div></div>
+ <div className="w-[38%] shrink-0 flex flex-col gap-2">
+  <Img p={p} className="w-full aspect-square rounded-xl"/>
+  <button onClick={()=>onAdd(p)} className="bg-black text-white rounded-lg py-1.5 text-sm font-medium">Adicionar</button></div></div>);
+
+const Feat=({p,onAdd})=>(<div onClick={()=>onAdd(p)} className="card p-3 flex flex-col cursor-pointer">
+ <div className="relative"><Img p={p} className="w-full aspect-[4/3] rounded-xl"/>
+ {(p.old>p.price||p.isNew)&&<span className="absolute top-2 right-2 bg-black text-white rounded-full p-2"><Ico n="gift" c="w-5 h-5"/></span>}</div>
+ <h3 className="text-lg font-bold text-gray-800 mt-3">{p.name}</h3>
+ <p className="text-sm text-gray-500 line-clamp-2 min-h-[2.5rem]">{p.desc}</p>
+ <div className="mt-2 flex items-end justify-between gap-2"><Price p={p}/>
+ <button onClick={()=>onAdd(p)} className="bg-black text-white rounded-lg px-3 py-1.5 text-sm">Adicionar</button></div></div>);
+
+function ProductModal({p,onClose,onAdd}){
+ const gs=p.optOn===false?[]:(p.groups||[]).filter(g=>g.show!==false&&(g.options||[]).some(o=>o.active!==false));
+ const [sel,setSel]=useState({});const [qty,setQty]=useState(1);const [obs,setObs]=useState('');const [q,setQ]=useState({});const [sq,setSq]=useState({});const [err,setErr]=useState('');const [zoom,setZoom]=useState(false);const [ok,setOk]=useState(false);
+ const lim=g=>{const mx=Math.max(1,+g.max||1);const mn=g.required?Math.max(1,+g.min||1):(+g.min||0);return [Math.min(mn,mx),mx]};
+ const sub=g=>{const [mn,mx]=lim(g);const it=n=>n===1?'item':'itens';return (g.required?'Obrigatório · ':'Opcional · ')+(mn===mx?`Escolha ${mx} ${it(mx)}`:mn>0?`Escolha de ${mn} a ${mx} itens`:`Escolha até ${mx} ${it(mx)}`)};
+ const toggle=(g,o)=>{const [,mx]=lim(g);const cur=sel[g.id]||[];let n;
+  if(cur.includes(o.id))n=cur.filter(x=>x!==o.id);else if(mx===1)n=[o.id];else if(cur.length>=mx){setErr(`Você já escolheu ${mx} em "${g.name}". Desmarque uma opção para trocar.`);return}else n=[...cur,o.id];
+  setSel({...sel,[g.id]:n});setErr('')};
+ const extra=gs.reduce((s,g)=>s+(sel[g.id]||[]).reduce((t,id)=>t+(+((g.options.find(o=>o.id===id)||{}).price)||0),0),0);
+ const unit=p.price+extra;
+ const add=()=>{for(const g of gs){const [mn]=lim(g);const n=(sel[g.id]||[]).length;if(n<mn)return setErr(`Falta escolher em "${g.name}": mínimo de ${mn} ${mn===1?'item':'itens'} (você escolheu ${n}).`)}
+  onAdd(p,sel,obs.trim(),qty);setOk(true);setTimeout(onClose,900)};
+ return <div className="fixed inset-0 z-50 bg-[#F4F5F7] overflow-y-auto" style={{paddingBottom:110}}>
+  <div className="relative bg-white"><div onClick={()=>p.img&&setZoom(true)}><Img p={p} className="w-full h-72 object-contain"/></div>
+   <button onClick={onClose} className="absolute top-3 right-3 w-11 h-11 rounded-full bg-black/70 text-white flex items-center justify-center"><Ico n="x"/></button></div>
+  <div className="bg-white rounded-t-3xl -mt-5 relative p-5">
+   <h2 className="text-xl font-bold text-gray-800">{p.name}</h2>
+   <div className="flex items-center flex-wrap gap-x-2 mt-2"><span className={'text-xl font-bold '+(disc(p)?'text-green-600':'text-gray-800')}>{brl(p.price)}</span>
+    {disc(p)>0&&<><span className="line-through text-gray-400">{brl(p.old)}</span><span className="bg-green-100 text-green-700 text-xs font-semibold rounded-md px-1.5 py-0.5">-{disc(p)}%</span></>}</div>
+   {p.desc&&<p className="text-sm text-gray-500 mt-3">{p.desc}</p>}</div>
+  {gs.map(g=>{const [mn,mx]=lim(g);const chosen=(sel[g.id]||[]);const ops=(g.options||[]).filter(o=>o.active!==false);const many=ops.length>6;
+   const shown=ops.filter(o=>o.name.toLowerCase().includes((q[g.id]||'').toLowerCase()));
+   return <div key={g.id} className="mt-4 mx-0 bg-white rounded-2xl overflow-hidden">
+    <div className="p-4 flex items-start justify-between gap-2"><div><h3 className="font-bold text-gray-800">{g.name}</h3><p className="text-sm text-gray-500">{sub(g)}</p></div>
+     <div className="flex items-center gap-2 shrink-0"><span className="text-xs bg-gray-100 rounded-full px-2 py-1">{chosen.length}/{mx}</span>{many&&<button onClick={()=>setSq({...sq,[g.id]:!sq[g.id]})}><Ico n="search" c="w-5 h-5"/></button>}</div></div>
+    {many&&sq[g.id]&&<div className="px-4 pb-3"><input autoFocus className="w-full bg-gray-100 rounded-lg px-3 py-2 text-sm" placeholder="Pesquise pelo nome" value={q[g.id]||''} onChange={e=>setQ({...q,[g.id]:e.target.value})}/></div>}
+    {shown.map(o=>{const on=chosen.includes(o.id);return <button key={o.id} onClick={()=>toggle(g,o)} className="w-full flex items-center gap-3 px-4 py-3 border-t border-gray-100 text-left">
+     {o.img&&<img src={o.img} className="w-14 h-14 rounded-xl object-cover shrink-0"/>}
+     <div className="flex-1 min-w-0"><div className="font-semibold text-gray-800">{o.name}</div>{+o.price>0&&<div className="text-sm text-gray-500">+ {brl(o.price)}</div>}</div>
+     <span className={'w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 '+(on?'border-black bg-black':'border-gray-300')}>{on&&<span className="w-2 h-2 rounded-full bg-white"/>}</span></button>})}
+    {!shown.length&&<p className="px-4 pb-4 text-sm text-gray-400">Nenhuma opção encontrada.</p>}</div>})}
+  <div className="mt-4 bg-white rounded-2xl p-4"><h3 className="font-bold text-gray-800 mb-2">Observações</h3><textarea rows="3" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Ex.: sem gelo, embalar para presente…" value={obs} onChange={e=>setObs(e.target.value)}/></div>
+  <div className="fixed bottom-0 inset-x-0 bg-white border-t border-gray-200 p-3 flex items-center gap-3" style={{paddingBottom:'calc(12px + env(safe-area-inset-bottom,0px))'}}>
+   {err&&<div className="absolute bottom-full inset-x-0 bg-red-600 text-white text-sm px-4 py-2">{err}</div>}
+   <div className="flex items-center gap-3"><button className="w-10 h-10 border border-gray-300 rounded-lg text-xl" onClick={()=>setQty(Math.max(1,qty-1))}>−</button><span className="w-5 text-center font-semibold">{qty}</span><button className="w-10 h-10 border border-gray-300 rounded-lg text-xl" onClick={()=>setQty(qty+1)}>+</button></div>
+   <button onClick={add} className="flex-1 bg-black text-white rounded-xl py-3 px-4 font-bold flex justify-between"><span>Adicionar</span><span>{brl(unit*qty)}</span></button></div>
+  {ok&&<div className="fixed top-6 inset-x-0 mx-auto w-fit bg-black text-white rounded-full px-4 py-2 z-[60]">Adicionado ao carrinho</div>}
+  {zoom&&<div className="fixed inset-0 z-[70] bg-black flex items-center justify-center" onClick={()=>setZoom(false)}><img src={p.img} className="max-w-full max-h-full object-contain"/></div>}
+ </div>}
+function GroupsEditor({f,setF,up}){
+ const gs=f.groups||[];const set=g=>setF(s=>({...s,groups:g}));
+ const uid=()=>Math.random().toString(36).slice(2,9);
+ const mv=(a,i,d)=>{const j=i+d;if(j<0||j>=a.length)return a;const b=[...a];[b[i],b[j]]=[b[j],b[i]];return b};
+ const upG=(i,pt)=>set(gs.map((g,k)=>k===i?{...g,...pt}:g));
+ const upO=(i,j,pt)=>upG(i,{options:gs[i].options.map((o,k)=>k===j?{...o,...pt}:o)});
+ const inp='w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white';const b='rounded-lg px-2 py-1 text-xs border border-gray-300 bg-white';
+ return <div className="border-t border-gray-200 pt-3 space-y-3"><div className="font-bold text-gray-800">OPÇÕES PERSONALIZADAS</div>
+  <label className="flex gap-2 text-sm items-center"><input type="checkbox" checked={f.optOn!==false} onChange={e=>setF(s=>({...s,optOn:e.target.checked}))}/>Opções ativas neste produto</label>
+  {gs.map((g,i)=><div key={g.id} className="bg-gray-50 rounded-xl p-3 space-y-2">
+   <input className={inp} placeholder="Nome do grupo (ex.: Escolha o sabor)" value={g.name} onChange={e=>upG(i,{name:e.target.value})}/>
+   <div className="flex flex-wrap gap-3 text-sm"><label className="flex gap-1 items-center"><input type="checkbox" checked={!!g.required} onChange={e=>upG(i,{required:e.target.checked})}/>Obrigatório</label><label className="flex gap-1 items-center"><input type="checkbox" checked={g.show!==false} onChange={e=>upG(i,{show:e.target.checked})}/>Aparece no produto</label></div>
+   <div className="flex gap-2"><input className={inp} type="number" min="0" placeholder="Mínimo" value={g.min} onChange={e=>upG(i,{min:e.target.value})}/><input className={inp} type="number" min="1" placeholder="Máximo" value={g.max} onChange={e=>upG(i,{max:e.target.value})}/></div>
+   {(g.options||[]).map((o,j)=><div key={o.id} className="bg-white rounded-lg p-2 space-y-2">
+    <div className="flex gap-2"><input className={inp} placeholder="Nome da opção" value={o.name} onChange={e=>upO(i,j,{name:e.target.value})}/><input className={inp+' max-w-[100px]'} type="number" placeholder="+ R$" value={o.price} onChange={e=>upO(i,j,{price:e.target.value})}/></div>
+    <div className="flex items-center gap-2 flex-wrap">{o.img&&<img src={o.img} className="w-10 h-10 rounded object-cover"/>}<input type="file" accept="image/*" className="text-xs max-w-[170px]" onChange={e=>up(e,u=>upO(i,j,{img:u}))}/>
+     <label className="flex gap-1 items-center text-xs"><input type="checkbox" checked={o.active!==false} onChange={e=>upO(i,j,{active:e.target.checked})}/>Ativa</label>
+     <button className={b} onClick={()=>upG(i,{options:mv(g.options,j,-1)})}>↑</button><button className={b} onClick={()=>upG(i,{options:mv(g.options,j,1)})}>↓</button><button className={b+' text-red-600'} onClick={()=>upG(i,{options:g.options.filter((_,k)=>k!==j)})}>Excluir</button></div></div>)}
+   <div className="flex gap-2 flex-wrap"><button className={b} onClick={()=>upG(i,{options:[...(g.options||[]),{id:uid(),name:'',price:'',img:'',active:true}]})}>+ Opção</button><button className={b} onClick={()=>set(mv(gs,i,-1))}>Grupo ↑</button><button className={b} onClick={()=>set(mv(gs,i,1))}>Grupo ↓</button><button className={b+' text-red-600'} onClick={()=>set(gs.filter((_,k)=>k!==i))}>Excluir grupo</button></div></div>)}
+  <button className="w-full border border-dashed border-gray-400 rounded-lg py-2 text-sm" onClick={()=>set([...gs,{id:uid(),name:'',required:false,show:true,min:0,max:1,options:[{id:uid(),name:'',price:'',img:'',active:true}]}])}>+ Criar grupo de opções</button></div>}
+
+const b32='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+const genSecret=()=>{const a=crypto.getRandomValues(new Uint8Array(20));let bits='',o='';a.forEach(x=>bits+=x.toString(2).padStart(8,'0'));for(let i=0;i<bits.length;i+=5)o+=b32[parseInt(bits.slice(i,i+5),2)];return o};
+const unb32=s=>{let bits='';for(const c of s)bits+=b32.indexOf(c).toString(2).padStart(5,'0');const n=Math.floor(bits.length/8);const u=new Uint8Array(n);for(let i=0;i<n;i++)u[i]=parseInt(bits.slice(i*8,i*8+8),2);return u};
+const hotp=async(sec,ctr)=>{const k=await crypto.subtle.importKey('raw',unb32(sec),{name:'HMAC',hash:'SHA-1'},false,['sign']);const buf=new ArrayBuffer(8);const dv=new DataView(buf);dv.setUint32(0,Math.floor(ctr/4294967296));dv.setUint32(4,ctr>>>0);const h=new Uint8Array(await crypto.subtle.sign('HMAC',k,buf));const off=h[19]&15;const n=(((h[off]&127)<<24)|(h[off+1]<<16)|(h[off+2]<<8)|h[off+3])%1000000;return String(n).padStart(6,'0')};
+const verifyCode=async(sec,code)=>{const c=Math.floor(Date.now()/30000);for(const d of [-1,0,1])if(await hotp(sec,c+d)===code)return true;return false};
+function Shell({exit,children}){return <div className="min-h-screen pb-10"><div className="bg-black text-white px-4 py-3 flex items-center justify-between"><b>Painel da loja</b><div className="flex gap-3"><button className="text-sm underline" onClick={exit}>Ver loja</button><button className="text-sm underline" onClick={exit}>Sair</button></div></div>{children}</div>}
+function TwoFA({db,onOk}){
+ const [st,setSt]=useState('load');const [sec,setSec]=useState('');const [code,setCode]=useState('');const [err,setErr]=useState('');const [tries,setTries]=useState(0);const [lock,setLock]=useState(0);
+ const ref=React.useRef(null);const qr=React.useRef(null);
+ useEffect(()=>{(async()=>{try{const u=await claude.use('user');const id=await u.id();ref.current=db.collection('data/users/'+id).doc('totp');const s=await ref.current.get();
+  if(s.exists&&s.data()&&s.data().secret){setSec(s.data().secret);setSt('ask')}else{setSec(genSecret());setSt('setup')}}catch(e){setSt('fail')}})()},[]);
+ useEffect(()=>{if(st==='setup'&&qr.current&&window.QRCode){qr.current.innerHTML='';try{new QRCode(qr.current,{text:'otpauth://totp/Adega:Painel?secret='+sec+'&issuer=Adega',width:168,height:168})}catch(e){}}},[st,sec]);
+ const go=async()=>{if(Date.now()<lock)return setErr('Muitas tentativas. Aguarde 1 minuto.');
+  if(!/^\d{6}$/.test(code.trim()))return setErr('Digite os 6 números do aplicativo.');
+  if(await verifyCode(sec,code.trim())){if(st==='setup'){try{await ref.current.set({secret:sec,at:new Date().toISOString()})}catch(e){return setErr('Não foi possível salvar a verificação.')}}onOk()}
+  else{const n=tries+1;setCode('');if(n>=5){setLock(Date.now()+60000);setTries(0);setErr('Muitas tentativas. Aguarde 1 minuto.')}else{setTries(n);setErr('Código incorreto ou expirado.')}}};
+ if(st==='load')return <p className="p-4 text-gray-500">Verificando…</p>;
+ if(st==='fail')return <div className="p-4"><div className="card p-4 text-sm text-gray-600">Não foi possível iniciar a verificação em duas etapas. Recarregue a página.</div></div>;
+ return <div className="p-4"><div className="card p-5 space-y-3">
+  <h2 className="font-bold text-gray-800 text-lg">{st==='setup'?'Ativar verificação em duas etapas':'Verificação em duas etapas'}</h2>
+  {st==='setup'?<><p className="text-sm text-gray-500">Abra o Google Authenticator, Microsoft Authenticator ou similar, escaneie o QR code (ou digite a chave) e informe o código de 6 números.</p>
+   <div className="flex justify-center"><div ref={qr}/></div><div className="text-center text-sm font-mono break-all bg-gray-100 rounded-lg p-2">{sec.match(/.{1,4}/g).join(' ')}</div></>
+  :<p className="text-sm text-gray-500">Digite o código de 6 números do seu aplicativo autenticador.</p>}
+  <input className="w-full border border-gray-300 rounded-lg px-3 py-3 text-center text-2xl tracking-widest" inputMode="numeric" maxLength="6" placeholder="000000" value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,''))} onKeyDown={e=>e.key==='Enter'&&go()}/>
+  {err&&<p className="text-sm text-red-600">{err}</p>}
+  <button className="w-full bg-black text-white rounded-xl py-3 font-bold" onClick={go}>{st==='setup'?'ATIVAR E ENTRAR':'ENTRAR'}</button></div></div>}
+
+function Admin({db,P,C,nOrders,ords,canEdit,ready,exit,st}){
+ const [t,setT]=useState('home');const [ok2,setOk2]=useState(false);const [f,setF]=useState(null);const [cf,setCf]=useState(null);const [msg,setMsg]=useState('');const [del,setDel]=useState(null);
+ const inp='w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white';
+ const byO=(a,b)=>(a.order||0)-(b.order||0);
+ const PS=[...P].sort(byO),CS=[...C].sort(byO);
+ const run=async fn=>{try{await fn();setMsg('Alterações salvas.');return true}catch(e){setMsg('Não foi possível salvar: '+((e&&e.message)||'sem permissão'));return false}};
+ const put=(col,o)=>run(()=>db.collection(col).doc(String(o.id)).set(o));
+ const rm=(col,id)=>run(async()=>{await db.collection(col).doc(String(id)).delete();setDel(null)});
+ const move=(col,arr,i,d)=>{const j=i+d;if(j<0||j>=arr.length)return;const a=[...arr];[a[i],a[j]]=[a[j],a[i]];run(()=>Promise.all(a.map((x,k)=>db.collection(col).doc(String(x.id)).update({order:k}))))};
+ const up=async(e,set)=>{const file=e.target.files[0];if(!file)return;try{const A=await claude.use('assets');if(!A){setMsg('Envio de fotos indisponível.');return}const r=await A.upload(file);set(r.url);setMsg('Foto enviada. Toque em salvar.')}catch(x){setMsg('Falha ao enviar a foto.')}};
+ const saveP=async()=>{const n=f.name.trim(),pr=+f.price,pm=+f.promo||0;
+  if(!n)return setMsg('Informe o nome do produto.');if(!(pr>0))return setMsg('Informe um preço de venda válido.');
+  if(f.promoOn&&!(pm>0&&pm<pr))return setMsg('O preço promocional deve ser menor que o preço de venda.');
+  const gerr=(f.groups||[]).map(g=>!g.name.trim()?'Dê um nome a todos os grupos de opções.':!(g.options||[]).length?`O grupo "${g.name}" precisa de ao menos uma opção.`:g.options.some(o=>!o.name.trim())?`Há opção sem nome em "${g.name}".`:(+g.min||0)>(+g.max||1)?`Em "${g.name}", o mínimo não pode ser maior que o máximo.`:'').find(Boolean);
+  if(gerr)return setMsg(gerr);
+  const groups=(f.groups||[]).map(g=>({...g,name:g.name.trim(),min:+g.min||0,max:Math.max(1,+g.max||1),options:g.options.map(o=>({...o,name:o.name.trim(),price:+o.price||0}))}));
+  if(await put('products',{...f,groups,optOn:f.optOn!==false,name:n,desc:(f.desc||'').trim(),price:pr,promo:pm,id:f.id||String(Date.now()),order:f.id?(f.order||0):PS.length}))setF(null)};
+ const saveC=async()=>{const n=cf.name.trim();if(!n)return setMsg('Informe o nome da categoria.');
+  if(await put('categories',{...cf,name:n,id:cf.id||String(Date.now()),order:cf.id?(cf.order||0):CS.length}))setCf(null)};
+ const btn='rounded-lg px-3 py-2 text-sm font-medium border border-gray-300 bg-white';
+ const Chk=({k,l})=><label className="flex gap-2 text-sm items-center"><input type="checkbox" checked={!!f[k]} onChange={e=>setF({...f,[k]:e.target.checked})}/>{l}</label>;
+ if(!ready)return <Shell exit={exit}><p className="p-4 text-gray-500">Carregando…</p></Shell>;
+ if(!db||!canEdit)return <Shell exit={exit}><div className="p-4"><div className="card p-4"><h2 className="font-bold text-gray-800">Acesso restrito</h2><p className="text-sm text-gray-500 mt-1">Esta área é exclusiva do proprietário. Entre na conta do proprietário para continuar.</p></div></div></Shell>;
+ if(!ok2)return <Shell exit={exit}><TwoFA db={db} onOk={()=>setOk2(true)}/></Shell>;
+ const tabs=[['home','Painel'],['prod','Produtos'],['cat','Categorias'],['promo','Promoções'],['ped','Pedidos'],['loja','Loja']];
+ const PromoRow=({p})=>{const [d,setD]=useState(p.promo>0?String(Math.round((1-p.promo/p.price)*100)):'');const v=+d;
+  return <div className="card p-3 space-y-2"><div className="flex justify-between"><b className="text-sm">{p.name}</b><span className="text-sm text-gray-500">{brl(p.price)}</span></div>
+  <div className="flex gap-2 items-center"><input className={inp} type="number" placeholder="Desconto %" value={d} onChange={e=>setD(e.target.value)}/>
+  <button className={btn} onClick={()=>{if(!(v>0&&v<100))return setMsg('Informe um desconto entre 1 e 99.');put('products',{...p,promo:Math.round(p.price*(100-v))/100,promoOn:true})}}>Aplicar</button></div>
+  <div className="flex justify-between items-center text-sm"><span>{p.promo>0?'Promocional: '+brl(p.promo):'Sem preço promocional'}</span>
+  <button className={btn} onClick={()=>put('products',{...p,promoOn:!p.promoOn})} disabled={!(p.promo>0)}>{p.promoOn?'Desativar':'Ativar'}</button></div></div>};
+ return <Shell exit={exit}><div className="px-4 pt-3 flex gap-2 overflow-x-auto">{tabs.map(([k,l])=><button key={k} onClick={()=>{setT(k);setF(null);setCf(null);setMsg('')}} className={'shrink-0 rounded-full px-4 py-2 text-sm '+(t===k?'bg-black text-white':'bg-white border border-gray-300')}>{l}</button>)}</div>
+ {msg&&<div className="mx-4 mt-3 card p-3 text-sm">{msg}</div>}
+ <div className="p-4 space-y-3">
+ {t==='home'&&<><div className="grid grid-cols-2 gap-3">{[['Produtos cadastrados',P.length],['Produtos ativos',P.filter(p=>p.active).length],['Produtos inativos',P.filter(p=>!p.active).length],['Em promoção',P.filter(p=>p.promoOn&&p.promo>0).length],['Pedidos recebidos',nOrders]].map(([l,n])=><div key={l} className="card p-4"><div className="text-3xl font-bold text-gray-800">{n}</div><div className="text-sm text-gray-500">{l}</div></div>)}</div>
+  <button className="w-full bg-black text-white rounded-xl py-4 font-bold" onClick={()=>{setT('prod');setF({name:'',desc:'',price:'',promo:'',promoOn:false,cat:CS[0]?CS[0].id:'',brand:'',feat:false,isNew:false,active:true,img:''})}}>+ ADICIONAR PRODUTO</button>
+  <h3 className="font-bold text-gray-800 pt-2">Gerenciar loja</h3>
+  <div className="card divide-y divide-gray-100">{[['prod','Produtos'],['cat','Categorias'],['promo','Promoções'],['ped','Pedidos'],['loja','Loja']].map(([k,l])=><button key={k} onClick={()=>{setT(k);setMsg('')}} className="w-full flex justify-between items-center px-4 py-4 text-left text-gray-800"><span>{l}</span><span className="text-gray-400 text-xl">›</span></button>)}</div></>}
+ {t==='prod'&&!f&&<><button className="w-full bg-black text-white rounded-xl py-4 font-bold" onClick={()=>setF({name:'',desc:'',price:'',promo:'',promoOn:false,cat:CS[0]?CS[0].id:'',brand:'',feat:false,isNew:false,active:true,img:''})}>+ ADICIONAR PRODUTO</button>
+  {PS.map((p,i)=><div key={p.id} className={'card p-3 space-y-2 '+(p.active?'':'opacity-60')}><div className="flex gap-3 items-center"><Img p={p} className="w-14 h-14 rounded-lg shrink-0"/><div className="min-w-0 flex-1"><div className="font-semibold text-sm truncate">{p.name}</div><div className="text-xs text-gray-500">{brl(p.price)}{p.promoOn&&p.promo>0?' → '+brl(p.promo):''}{p.active?'':' · inativo'}</div></div></div>
+  <div className="flex flex-wrap gap-2"><button className={btn} onClick={()=>move('products',PS,i,-1)}>↑</button><button className={btn} onClick={()=>move('products',PS,i,1)}>↓</button>
+  <button className={btn} onClick={()=>put('products',{...p,active:!p.active})}>{p.active?'Desativar':'Ativar'}</button><button className={btn} onClick={()=>setF({...p})}>Editar</button>
+  {del===p.id?<button className={btn+' text-red-600'} onClick={()=>rm('products',p.id)}>Confirmar exclusão</button>:<button className={btn+' text-red-600'} onClick={()=>setDel(p.id)}>Excluir</button>}</div></div>)}</>}
+ {t==='prod'&&f&&<div className="card p-4 space-y-2"><h3 className="font-bold text-gray-800">{f.id?'Editar produto':'Novo produto'}</h3>
+  <input className={inp} placeholder="Nome do produto" value={f.name} onChange={e=>setF({...f,name:e.target.value})}/>
+  <textarea className={inp} rows="3" placeholder="Descrição" value={f.desc} onChange={e=>setF({...f,desc:e.target.value})}/>
+  <div className="flex gap-2"><input className={inp} type="number" inputMode="decimal" placeholder="Preço de venda" value={f.price} onChange={e=>setF({...f,price:e.target.value})}/><input className={inp} type="number" inputMode="decimal" placeholder="Preço promocional" value={f.promo} onChange={e=>setF({...f,promo:e.target.value})}/></div>
+  <select className={inp} value={f.cat} onChange={e=>setF({...f,cat:e.target.value})}><option value="">Sem categoria</option>{CS.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>
+  <input className={inp} placeholder="Marca" value={f.brand||''} onChange={e=>setF({...f,brand:e.target.value})}/>
+  <div className="flex items-center gap-3">{f.img&&<img src={f.img} className="w-16 h-16 rounded-lg object-cover"/>}<input type="file" accept="image/*" className="text-sm" onChange={e=>up(e,u=>setF(s=>({...s,img:u})))}/></div>
+  <Chk k="promoOn" l="Promoção ativa"/><Chk k="feat" l="Destaque"/><Chk k="isNew" l="Lançamento"/><Chk k="active" l="Produto ativo"/>
+  <GroupsEditor f={f} setF={setF} up={up}/>
+  <button className="w-full bg-black text-white rounded-xl py-3 font-bold" onClick={saveP}>SALVAR PRODUTO</button><button className="w-full text-sm underline" onClick={()=>setF(null)}>Cancelar</button></div>}
+ {t==='cat'&&!cf&&<><button className="w-full bg-black text-white rounded-xl py-4 font-bold" onClick={()=>setCf({name:'',desc:'',img:''})}>+ ADICIONAR CATEGORIA</button>
+  {CS.map((c,i)=><div key={c.id} className="card p-3 space-y-2"><div className="flex gap-3 items-center">{c.img?<img src={c.img} className="w-12 h-12 rounded-lg object-cover"/>:<div className="w-12 h-12 rounded-lg bg-gray-100"/>}<div className="font-semibold text-sm">{c.name}</div></div>
+  <div className="flex flex-wrap gap-2"><button className={btn} onClick={()=>move('categories',CS,i,-1)}>↑</button><button className={btn} onClick={()=>move('categories',CS,i,1)}>↓</button><button className={btn} onClick={()=>setCf({...c})}>Editar</button>
+  {del===c.id?<button className={btn+' text-red-600'} onClick={()=>rm('categories',c.id)}>Confirmar exclusão</button>:<button className={btn+' text-red-600'} onClick={()=>setDel(c.id)}>Excluir</button>}</div></div>)}</>}
+ {t==='cat'&&cf&&<div className="card p-4 space-y-2"><h3 className="font-bold text-gray-800">{cf.id?'Editar categoria':'Nova categoria'}</h3>
+  <input className={inp} placeholder="Nome" value={cf.name} onChange={e=>setCf({...cf,name:e.target.value})}/>
+  <textarea className={inp} rows="2" placeholder="Descrição" value={cf.desc||''} onChange={e=>setCf({...cf,desc:e.target.value})}/>
+  <div className="flex items-center gap-3">{cf.img&&<img src={cf.img} className="w-16 h-16 rounded-lg object-cover"/>}<input type="file" accept="image/*" className="text-sm" onChange={e=>up(e,u=>setCf(s=>({...s,img:u})))}/></div>
+  <button className="w-full bg-black text-white rounded-xl py-3 font-bold" onClick={saveC}>SALVAR CATEGORIA</button><button className="w-full text-sm underline" onClick={()=>setCf(null)}>Cancelar</button></div>}
+ {t==='ped'&&(ords.length?[...ords].sort((a,b)=>String(b.date).localeCompare(String(a.date))).map(o=><div key={o.id} className="card p-4"><div className="text-sm text-gray-500">{new Date(o.date).toLocaleString('pt-BR')}</div><div className="text-gray-800 mt-1">{(o.items||[]).join(', ')}</div><div className="font-semibold mt-1">{brl(o.total)}</div></div>):<p className="text-gray-500">Nenhum pedido recebido ainda.</p>)}
+ {t==='loja'&&<StoreSet db={db} st={st} setMsg={setMsg}/>}
+ {t==='promo'&&(PS.length?PS.map(p=><PromoRow key={p.id+'-'+p.promo} p={p}/>):<p className="text-gray-500">Cadastre produtos para criar promoções.</p>)}
+ </div></Shell>}
+
+const WA_DEFAULT='5511945040312';
+const FINAL=false; // true na versão final: esconde o link da área do proprietário
+const EC={name:'',phone:'',street:'',comp:'',ref:'',bairro:'',city:'',pay:'Pix',troco:''};
+function CustFields({cust,setCust}){
+ const inp='w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white';
+ const F=(k,ph,t)=><input className={inp} type={t||'text'} placeholder={ph} value={cust[k]||''} onChange={e=>setCust({...cust,[k]:e.target.value})}/>;
+ return <div className="space-y-2">{F('name','Nome')}{F('phone','Telefone com DDD','tel')}{F('street','Rua e número')}{F('comp','Complemento (opcional)')}{F('ref','Referência (opcional)')}{F('bairro','Bairro')}{F('city','Cidade/UF')}</div>}
+function Checkout({lines,sub,st,cust,setCust,onSent,back}){
+ const [err,setErr]=useState('');const [num]=useState(()=>Math.floor((Date.now()-1767225600000)/60000)%100000);
+ const fee=+st.fee||0,tot=sub+fee;
+ const dig=(cust.phone||'').replace(/\D/g,'');
+ const need=!(cust.name||'').trim()?'Informe seu nome.':dig.length<10?'Informe um telefone com DDD.':!(cust.street||'').trim()?'Informe a rua e o número.':!(cust.bairro||'').trim()?'Informe o bairro.':!(cust.city||'').trim()?'Informe a cidade.':'';
+ const wa=(st.whatsapp||WA_DEFAULT).replace(/\D/g,'');
+ const mk=()=>{const d=new Date();const dt=d.toLocaleDateString('pt-BR')+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  const items=lines.map(l=>`${l.qty} x ${l.p.name}\n${l.os.map(o=>'➡️ '+o.name+(o.price?' (+'+brl(o.price)+')':'')+'\n').join('')}${l.obs?'📝 '+l.obs+'\n':''}💵 ${l.qty} x ${brl(l.unit)} = ${brl(l.qty*l.unit)}`).join('\n\n');
+  const pay=cust.pay==='Dinheiro'?`Dinheiro: ${brl(tot)}`+(cust.troco?`\nTroco para: ${cust.troco}`:''):cust.pay==='Cartão'?`Cartão (na entrega): ${brl(tot)}`:`Pix: ${brl(tot)}`;
+  return [`#️⃣  Pedido Nº ${num}`,`feito em ${dt}`,'',`👤  ${cust.name.trim()}`,`📞  ${cust.phone.trim()}`,'',`🕐   Prazo para entrega: ${st.prazo||70} min`,'','🛵  Endereço de entrega',cust.street.trim(),cust.comp?`Complemento: ${cust.comp.trim()}`:null,cust.ref?`Referência: ${cust.ref.trim()}`:null,`${cust.bairro.trim()}, ${cust.city.trim()}`,'','------ ITENS DO PEDIDO ------','',items,'','-----------------------------','',`SUBTOTAL: ${brl(sub)}`,`ENTREGA: ${brl(fee)}`,'',`VALOR FINAL: ${brl(tot)}`,'','','💲  FORMA DE PAGAMENTO','',pay].filter(x=>x!==null).join('\n')};
+ const href=wa&&!need?'https://wa.me/'+wa+'?text='+encodeURIComponent(mk()):'#';
+ const copy=async()=>{try{await navigator.clipboard.writeText(mk());setErr('Mensagem copiada. Cole no WhatsApp.')}catch(e){setErr('Não foi possível copiar.')}};
+ return <div className="space-y-3"><button className="text-sm underline" onClick={back}>Voltar ao carrinho</button>
+  <CustFields cust={cust} setCust={setCust}/>
+  <div className="flex gap-2">{['Pix','Cartão','Dinheiro'].map(m=><button key={m} onClick={()=>setCust({...cust,pay:m})} className={'flex-1 rounded-lg py-2 text-sm border '+(cust.pay===m?'bg-black text-white border-black':'bg-white border-gray-300')}>{m}</button>)}</div>
+  {cust.pay==='Dinheiro'&&<input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Troco para quanto? (opcional)" value={cust.troco||''} onChange={e=>setCust({...cust,troco:e.target.value})}/>}
+  <div className="text-sm space-y-1"><div className="flex justify-between"><span>Subtotal</span><span>{brl(sub)}</span></div><div className="flex justify-between"><span>Entrega</span><span>{brl(fee)}</span></div><div className="flex justify-between font-bold text-lg"><span>Valor final</span><span>{brl(tot)}</span></div></div>
+  {err&&<p className="text-sm text-red-600">{err}</p>}
+  <a href={href} target="_blank" rel="noopener noreferrer" className="block text-center bg-green-600 text-white rounded-xl py-3 font-bold" onClick={e=>{if(need){e.preventDefault();setErr(need);return}if(!wa){e.preventDefault();setErr('O WhatsApp da loja ainda não foi configurado no painel (aba Loja).');return}setTimeout(onSent,1500)}}>Enviar pedido pelo WhatsApp</a>
+  <button className="w-full text-sm underline" onClick={()=>{if(need)setErr(need);else copy()}}>Copiar mensagem do pedido</button>
+  <p className="text-xs text-gray-400 text-center">Você confirma o pedido e o pagamento direto no WhatsApp.</p></div>}
+function Profile({cust,setCust}){
+ return(<div className="space-y-3"><div className="card p-4 space-y-2"><h3 className="font-bold text-gray-800">Seus dados</h3><p className="text-xs text-gray-500">Ficam salvos neste aparelho para agilizar os próximos pedidos. Não é preciso criar conta.</p><CustFields cust={cust} setCust={setCust}/></div>
+  {!FINAL&&<a href="#admin" className="block text-center text-sm text-gray-400 underline">Área do proprietário</a>}</div>)}
+function StoreSet({db,st,setMsg}){
+ const [v,setV]=useState({whatsapp:st.whatsapp||'',fee:st.fee||0,prazo:st.prazo||70});
+ const inp='w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white';
+ const save=async()=>{const w=v.whatsapp.replace(/\D/g,'');if(w.length<12)return setMsg('Informe o WhatsApp com 55 + DDD + número.');
+  try{await db.doc('settings/store').set({whatsapp:w,fee:+v.fee||0,prazo:+v.prazo||70});setMsg('Configurações salvas.')}catch(e){setMsg('Não foi possível salvar.')}};
+ return <div className="card p-4 space-y-2"><h3 className="font-bold text-gray-800">Configurações da loja</h3>
+  <input className={inp} type="tel" placeholder="WhatsApp (ex.: 5511999999999)" value={v.whatsapp} onChange={e=>setV({...v,whatsapp:e.target.value})}/>
+  <input className={inp} type="number" placeholder="Taxa de entrega (R$)" value={v.fee} onChange={e=>setV({...v,fee:e.target.value})}/>
+  <input className={inp} type="number" placeholder="Prazo de entrega (min)" value={v.prazo} onChange={e=>setV({...v,prazo:e.target.value})}/>
+  <button className="w-full bg-black text-white rounded-xl py-3 font-bold" onClick={save}>SALVAR</button></div>}
+
+function App(){
+ const [db,setDb]=useState(null);const [canEdit,setCanEdit]=useState(false);const [ready,setReady]=useState(false);
+ const [rawP,setRawP]=useState([]);const [rawC,setRawC]=useState([]);const [nOrders,setNOrders]=useState(0);const [ordList,setOrdList]=useState([]);
+ const [st,setSt]=useState({whatsapp:'',fee:0,prazo:70});const [cust,setCust]=useState(ld('cust',EC));const [co,setCo]=useState(false);
+ useEffect(()=>sv('cust',cust),[cust]);
+ const byO=(a,b)=>(a.order||0)-(b.order||0);
+ const cats=useMemo(()=>[...rawC].sort(byO),[rawC]);CATS=cats;
+ const products=useMemo(()=>rawP.filter(p=>p.active).sort(byO).map(p=>{const on=p.promoOn&&p.promo>0&&p.promo<p.price;return {...p,price:on?p.promo:p.price,old:on?p.price:0}}),[rawP]);
+ useEffect(()=>{const un=[];const tm=setTimeout(()=>setReady(true),10000);(async()=>{
+  try{const u=await claude.use('user');if(u)setCanEdit(await u.canEdit())}catch(e){}
+  try{const d=await claude.use('db');if(!d){setReady(true);return}setDb(d);
+   un.push(d.collection('products').onSnapshot(x=>{setRawP(x.docs.map(y=>({...y.data(),id:y.id})));setReady(true)},()=>setReady(true)));
+   un.push(d.collection('categories').onSnapshot(x=>setRawC(x.docs.map(y=>({...y.data(),id:y.id}))),()=>{}));
+   un.push(d.doc('settings/store').onSnapshot(x=>{const v=x.data();if(v)setSt(o=>({...o,...v}))},()=>{}));
+   un.push(d.collection('orders').onSnapshot(x=>{setNOrders(x.size);setOrdList(x.docs.map(y=>({...y.data(),id:y.id})))},()=>{}))}catch(e){setReady(true)}})();
+  const h=()=>setTab(location.hash==='#admin'?'admin':'home');h();addEventListener('hashchange',h);
+  return()=>{clearTimeout(tm);un.forEach(f=>f&&f());removeEventListener('hashchange',h)}},[]);
+ const [tab,setTab]=useState('home');const [cat,setCat]=useState(null);
+ const [menu,setMenu]=useState(false);const [sOpen,setSOpen]=useState(false);const [q,setQ]=useState('');
+ const [cart,setCart]=useState(ld('cart2',[]));const [orders,setOrders]=useState(ld('orders',[]));
+ const [user,setUser]=useState(ld('user',null));const [cartOpen,setCartOpen]=useState(false);
+ useEffect(()=>sv('cart2',cart),[cart]);
+ useEffect(()=>sv('orders',orders),[orders]);useEffect(()=>sv('user',user),[user]);
+ const addLine=(p,sel,obs,qty)=>{const key=p.id+'|'+JSON.stringify(sel)+'|'+obs;setCart(c=>c.find(x=>x.key===key)?c.map(x=>x.key===key?{...x,qty:x.qty+qty}:x):[...c,{key,id:p.id,sel,obs,qty}])};
+ const [pm,setPm]=useState(null);
+ const lines=cart.map(c=>{const p=products.find(x=>x.id===c.id);if(!p)return null;const os=[];(p.groups||[]).forEach(g=>((c.sel||{})[g.id]||[]).forEach(oid=>{const o=(g.options||[]).find(x=>x.id===oid);if(o)os.push({g:g.name,name:o.name,price:+o.price||0})}));return {...c,p,os,unit:p.price+os.reduce((t,o)=>t+o.price,0)}}).filter(Boolean);
+ const pmP=pm&&products.find(x=>x.id===pm);
+ const total=lines.reduce((s,l)=>s+l.unit*l.qty,0);
+ const go=(t,c=null)=>{setTab(t);setCat(c);setMenu(false);setQ('');window.scrollTo(0,0)};
+ const sent=()=>{try{db&&db.collection('orders').doc(String(Date.now())).set({date:new Date().toISOString(),total:total+(+st.fee||0),items:lines.map(l=>l.qty+'x '+l.p.name)})}catch(e){}setOrders([{id:Date.now(),date:new Date().toLocaleString('pt-BR'),total:total+(+st.fee||0),items:lines.map(l=>l.qty+'x '+l.p.name)},...orders]);setCart([]);setCo(false);setCartOpen(false);go('orders')};
+ const searching=q.trim().length>0;
+ const found=products.filter(p=>(p.name+' '+p.desc).toLowerCase().includes(q.toLowerCase()));
+ const label=cat?(CATS.find(c=>c.id===cat)||{name:'Categorias'}).name:tab==='promo'?'Promoções':'Categorias';
+ const nav=[['home','Início','home'],['promo','Promoções','pct'],['orders','Pedidos','bag'],['profile','Perfil','user']];
+ let body;
+ if(searching)body=<div className="px-4 space-y-3">{found.length?found.map(p=><Row key={p.id} p={p} onAdd={p=>setPm(p.id)}/>):<p className="text-gray-500">Nenhum produto encontrado.</p>}</div>;
+ else if(tab==='home'&&!cat)body=<>
+  <h2 className="text-2xl font-bold text-gray-800 px-4 mt-6 mb-3">Destaques</h2>
+  <div className="hs">{products.filter(p=>p.feat).map(p=><Feat key={p.id} p={p} onAdd={p=>setPm(p.id)}/>)}</div>
+  {CATS.map(c=>{const l=products.filter(p=>p.cat===c.id);return l.length?<div key={c.id} className="px-4 mt-6"><h2 className="text-2xl font-bold text-gray-800 mb-3">{c.name}</h2><div className="space-y-3">{l.map(p=><Row key={p.id} p={p} onAdd={p=>setPm(p.id)}/>)}</div></div>:null})}</>;
+ else if(cat){const c=CATS.find(x=>x.id===cat)||{name:'',desc:''};const l=products.filter(p=>p.cat===cat);
+  body=<div className="px-4 mt-4">{c.img&&<img src={c.img} className="w-full h-32 object-cover rounded-2xl mb-3"/>}<h2 className="text-2xl font-bold text-gray-800">{c.name}</h2><p className="text-gray-500 mt-1 mb-4">{c.desc}</p>
+  <div className="space-y-3">{l.length?l.map(p=><Row key={p.id} p={p} onAdd={p=>setPm(p.id)}/>):<p className="text-gray-500">Nenhum produto nesta categoria.</p>}</div></div>}
+ else if(tab==='promo'){const l=products.filter(p=>p.old>p.price);body=<div className="px-4 mt-4"><h2 className="text-2xl font-bold text-gray-800 mb-3">Promoções</h2><div className="space-y-3">{l.length?l.map(p=><Row key={p.id} p={p} onAdd={p=>setPm(p.id)}/>):<p className="text-gray-500">Sem promoções no momento.</p>}</div></div>}
+ else if(tab==='orders')body=<div className="px-4 mt-4"><h2 className="text-2xl font-bold text-gray-800 mb-3">Pedidos</h2><div className="space-y-3">{orders.length?orders.map(o=><div key={o.id} className="card p-4"><div className="text-sm text-gray-500">{o.date}</div><div className="text-gray-800 mt-1">{o.items.join(', ')}</div><div className="font-semibold mt-1">{brl(o.total)}</div></div>):<p className="text-gray-500">Você ainda não fez pedidos.</p>}</div></div>;
+ else body=<div className="px-4 mt-4"><h2 className="text-2xl font-bold text-gray-800 mb-3">Perfil</h2><Profile cust={cust} setCust={setCust}/></div>;
+
+ if(ready&&!products.length&&tab==='home'&&!cat&&!searching)body=<p className="px-4 mt-6 text-gray-500">Loja em preparação. Volte em breve.</p>;
+ if(tab==='admin')return <Admin db={db} P={rawP} C={rawC} nOrders={nOrders} ords={ordList} st={st} canEdit={canEdit} ready={ready} exit={()=>{location.hash='';setTab('home')}}/>;
+ return(<div className="min-h-screen pb-28">
+    <header className="sticky top-0 z-30 bg-white shadow-sm px-4 py-3 flex items-center gap-3 relative" style={{top:0}}>
+   <button onClick={()=>go('home')} className="w-12 h-12 rounded-lg bg-gray-900 text-white text-2xl flex items-center justify-center shrink-0">🍷</button>
+   {sOpen?<input autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar produtos" className="flex-1 min-w-0 h-12 border border-gray-200 rounded-xl px-3"/>
+   :<button onClick={()=>setMenu(!menu)} className="h-12 px-4 border border-gray-200 rounded-xl flex items-center gap-2 font-semibold text-gray-700 bg-white"><span>{label}</span><Ico n="down" c="w-4 h-4"/></button>}
+   <div className="flex-1"/>
+   <button onClick={()=>{setSOpen(!sOpen);setQ('')}} className="w-12 h-12 border border-gray-200 rounded-xl flex items-center justify-center bg-white"><Ico n={sOpen?'x':'search'}/></button>
+   <button onClick={()=>setCartOpen(true)} className="relative w-12 h-12 border border-gray-200 rounded-xl flex items-center justify-center bg-white"><Ico n="cart"/>{cart.length>0&&<span className="absolute -top-1 -right-1 bg-black text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">{cart.reduce((s,c)=>s+c.qty,0)}</span>}</button>
+   {menu&&<div className="absolute left-16 top-16 card p-2 w-56 z-40">
+    <button className="block w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100" onClick={()=>go('home')}>Todos</button>
+    {CATS.map(c=><button key={c.id} className="block w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100" onClick={()=>go('home',c.id)}>{c.name}</button>)}</div>}
+  </header>
+  {body}
+  {pmP&&<ProductModal key={pmP.id} p={pmP} onClose={()=>setPm(null)} onAdd={addLine}/>}
+  {cartOpen&&<div className="fixed inset-0 z-40 bg-black/50 flex items-end" onClick={()=>setCartOpen(false)}>
+   <div className="bg-white w-full rounded-t-3xl p-5 max-h-[80vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+    <div className="flex justify-between items-center mb-3"><h3 className="text-xl font-bold text-gray-800">Carrinho</h3><button onClick={()=>setCartOpen(false)}><Ico n="x"/></button></div>
+    {co&&lines.length?<Checkout lines={lines} sub={total} st={st} cust={cust} setCust={setCust} onSent={sent} back={()=>setCo(false)}/>:lines.length?<>{lines.map(l=><div key={l.key} className="flex items-center gap-3 py-2 border-b border-gray-100">
+     <div className="flex-1 min-w-0"><div className="font-medium truncate">{l.p.name}</div>{l.os.map((o,k)=><div key={k} className="text-xs text-gray-500">➡️ {o.name}{o.price?' (+'+brl(o.price)+')':''}</div>)}{l.obs&&<div className="text-xs text-gray-500">📝 {l.obs}</div>}<div className="text-sm text-gray-500">{brl(l.unit)}</div></div>
+     <button className="w-8 h-8 border rounded-lg" onClick={()=>setCart(cart.map(c=>c.key===l.key?{...c,qty:c.qty-1}:c).filter(c=>c.qty>0))}>−</button>
+     <span className="w-5 text-center">{l.qty}</span>
+     <button className="w-8 h-8 border rounded-lg" onClick={()=>setCart(cart.map(c=>c.key===l.key?{...c,qty:c.qty+1}:c))}>+</button></div>)}
+     <div className="flex justify-between font-bold text-lg mt-4"><span>Total</span><span>{brl(total)}</span></div>
+     <button onClick={()=>setCo(true)} className="w-full bg-green-600 text-white rounded-xl py-3 mt-4 font-bold">Finalizar pelo WhatsApp</button>
+     <p className="text-xs text-gray-400 mt-2 text-center">Sem cadastro: o pedido segue para o WhatsApp da loja.</p></>
+    :<p className="text-gray-500">Seu carrinho está vazio.</p>}</div></div>}
+  <nav className="fixed bottom-0 inset-x-0 z-30 bg-white border-t border-gray-200 flex" style={{paddingBottom:'env(safe-area-inset-bottom,0px)'}}>
+   {nav.map(([k,t,i])=><button key={k} onClick={()=>go(k)} className={'flex-1 py-2 flex flex-col items-center gap-0.5 text-xs '+(tab===k&&!cat&&!searching?'text-black font-bold':'text-gray-400 font-medium')}><Ico n={i}/>{t}</button>)}</nav>
+ </div>)}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
